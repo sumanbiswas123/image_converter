@@ -25,3 +25,4 @@ image = "0.25.8"
 webp = "0.2.6"
 dirs = "4.0.0"
 base64 = "0.22.1"
+clap = { version = "4", features = ["derive"] }

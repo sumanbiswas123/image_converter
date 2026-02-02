@@ -9,6 +9,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::thread; // Import the thread module
+use std::net::TcpListener;
+use clap::Parser;
 use tauri::command;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::{DialogExt, FilePath}; // Add Deserialize
@@ -360,10 +362,52 @@ fn process_and_save_image(
     Ok(output_path.to_string_lossy().to_string())
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about = "Image Converter Tauri", long_about = None)]
+struct CliArgs {
+    /// Start with the window hidden
+    #[arg(long)]
+    window_hidden: bool,
+
+    /// Port to bind a simple listener to (optional)
+    #[arg(long)]
+    port: Option<u16>,
+}
+
 fn main() {
+    let args = CliArgs::parse();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .setup(move |app| {
+            if args.window_hidden {
+                if let Some(win) = app.get_window("main") {
+                    let _ = win.hide();
+                }
+            }
+
+            if let Some(port) = args.port {
+                std::thread::spawn(move || {
+                    match TcpListener::bind(("127.0.0.1", port)) {
+                        Ok(listener) => {
+                            // Keep the listener alive; accept and drop incoming connections
+                            for stream in listener.incoming() {
+                                match stream {
+                                    Ok(_s) => { /* connection accepted and dropped */ }
+                                    Err(_) => break,
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to bind to port {}: {}", port, e);
+                        }
+                    }
+                });
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             convert_image,
             select_folder_from_backend,
